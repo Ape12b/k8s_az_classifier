@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: titanic-container
-        image: abajpai8/titanic-predictor:v1
+        image: abajpai8/titanic-predictor:v2
         ports:
         - containerPort: 80
 ---
