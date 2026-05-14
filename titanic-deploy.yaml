@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: titanic-model
+  namespace: default
 spec:
   replicas: 2  # This starts 2 pods across your laptops
   selector:
@@ -22,6 +23,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: titanic-service
+  namespace: default
 spec:
   selector:
     app: titanic
