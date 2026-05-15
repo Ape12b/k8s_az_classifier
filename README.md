@@ -2,75 +2,107 @@
 
 ## Project Overview
 
-This project deploys a Titanic Survival Prediction API using a GitOps workflow managed by **Azure Arc** and **FluxCD**. The application is containerized with Docker, served through **FastAPI**, and deployed to Kubernetes as a microservice exposed on the local network.
+This project deploys a Titanic Survival Prediction API using a GitOps workflow managed by Azure Arc and FluxCD. The application is containerized with Docker, served through FastAPI, and deployed to Kubernetes as a microservice exposed through both a local Kubernetes LoadBalancer and a public Cloudflare Tunnel.
 
-The API uses a dual-model strategy in `main.py`, where predictions are routed to separate male and female survival models. This reflects the different statistical survival patterns in the Titanic dataset.
+The project also includes a browser-based interactive interface built with Gradio, allowing users to interact with the machine learning model through a web UI.
 
 ---
 
-## Technical Specifications
+# Architecture
+
+```text
+GitHub Repository
+        ↓
+FluxCD GitOps Sync
+        ↓
+Azure Arc Connected Kubernetes Cluster
+        ↓
+FastAPI Application
+        ├── REST API (/predict)
+        └── Gradio GUI (/gui)
+        ↓
+Kubernetes LoadBalancer Service
+        ↓
+Cloudflare Tunnel
+        ↓
+Public HTTPS Endpoint
+```
+
+---
+
+# Technical Specifications
 
 | Component | Specification |
 |---|---|
 | Python Version | Python 3.11 Slim |
 | API Framework | FastAPI |
+| GUI Framework | Gradio |
 | ML Frameworks | Scikit-Learn 1.8.0, XGBoost 3.2.0 |
 | Container Runtime | Docker |
 | Orchestration | Kubernetes |
 | GitOps Tooling | Azure Arc, FluxCD |
 | Deployment Strategy | Recreate / Rolling Update |
 | Service Type | LoadBalancer |
-| Exposure | Local network |
+| Public Exposure | Cloudflare Tunnel |
+| Domain | apratim-projects.com |
 
 ---
 
-## Repository Structure
+# Public URLs
 
-```text
-.
-├── main.py
-├── Dockerfile
-├── requirements.txt
-├── preprocessor.pkl
-├── final_stack_f.pkl
-├── final_stack_m.pkl
-├── deployment.yaml
-├── service.yaml
-└── README.md
-```
+| Service | URL |
+|---|---|
+| Root API | `https://api.apratim-projects.com` |
+| Prediction Endpoint | `https://api.apratim-projects.com/predict` |
+| Gradio GUI | `https://api.apratim-projects.com/gui` |
 
 ---
 
-## API Endpoint
+# Cloudflare Tunnel Setup
 
-### Health Check
-
-```http
-GET /
-```
-
-Expected response:
-
-```json
-{
-  "message": "Titanic survival API is running"
-}
-```
-
-### Prediction Endpoint
-
-```http
-POST /predict
-```
-
-The endpoint accepts Titanic passenger data as JSON and returns a survival prediction.
-
----
-
-## Sample Request
+## Authenticate with Cloudflare
 
 ```bash
-curl -X POST "http://192.168.1.213/predict" \
+cloudflared login
+```
+
+## Create Named Tunnel
+
+```bash
+cloudflared tunnel create titanic-api
+```
+
+## Configure Tunnel
+
+```yaml
+tunnel: <TUNNEL-UUID>
+credentials-file: /home/user/.cloudflared/<UUID>.json
+
+ingress:
+  - hostname: api.apratim-projects.com
+    service: http://192.168.1.213:80
+
+  - service: http_status:404
+```
+
+## Create DNS Route
+
+```bash
+cloudflared tunnel route dns titanic-api api.apratim-projects.com
+```
+
+## Run Tunnel
+
+```bash
+cloudflared tunnel run titanic-api
+```
+
+---
+
+# API Example
+
+```bash
+curl -X POST "https://api.apratim-projects.com/predict" \
      -H "Content-Type: application/json" \
      -d '{
        "Pclass": 3,
@@ -86,18 +118,43 @@ curl -X POST "http://192.168.1.213/predict" \
      }'
 ```
 
-Example response:
+---
 
-```json
-{
-  "survived": 0,
-  "sex_model_used": "male"
-}
+# Gradio GUI
+
+The project includes a mounted Gradio interface accessible at:
+
+```text
+https://api.apratim-projects.com/gui
 ```
+
+The interface provides:
+
+- Passenger name input
+- Sex selector
+- Age slider
+- Passenger class dropdown
+- Fare input
+- Family size inputs
+- Embarkation selection
+- Cabin entry
+- Real-time prediction results
 
 ---
 
-## Build and Deployment Commands
+# Security Recommendations
+
+| Security Layer | Purpose |
+|---|---|
+| Cloudflare Zero Trust | Authentication and access control |
+| API Keys | Restrict anonymous API usage |
+| HTTPS Enforcement | Encrypt traffic |
+| Rate Limiting | Prevent abuse |
+| WAF Rules | Block malicious requests |
+
+---
+
+# Build and Deployment Commands
 
 | Action | Command |
 |---|---|
@@ -107,68 +164,28 @@ Example response:
 
 ---
 
-## Debugging and Maintenance Commands
+# Debugging Commands
 
 | Action | Command |
 |---|---|
-| Check Pod Status | `sudo kubectl get pods` |
-| View App Logs | `sudo kubectl logs -l app=titanic` |
-| Inspect Pod Failure | `sudo kubectl describe pod <pod-name>` |
+| Check Pods | `sudo kubectl get pods` |
+| View Logs | `sudo kubectl logs -l app=titanic` |
+| Describe Pod | `sudo kubectl describe pod <pod-name>` |
 | Get Service IP | `sudo kubectl get svc titanic-service` |
-| Check Flux Kustomizations | `sudo kubectl get kustomizations -n flux-system` |
 
 ---
 
-## Model Artifacts
+# Project Summary
 
-The application expects the following files to be available inside the container:
+This project demonstrates:
 
-```text
-preprocessor.pkl
-final_stack_f.pkl
-final_stack_m.pkl
-```
+- Kubernetes orchestration
+- GitOps deployment with FluxCD
+- Azure Arc hybrid-cloud management
+- FastAPI REST APIs
+- Gradio interactive ML interfaces
+- Cloudflare secure tunneling
+- Public HTTPS deployment
+- Containerized machine learning serving
 
-These files are loaded at FastAPI startup:
-
-```python
-preprocessor = joblib.load("preprocessor.pkl")
-model_f = joblib.load("final_stack_f.pkl")
-model_m = joblib.load("final_stack_m.pkl")
-```
-
----
-
-## Feature Engineering Summary
-
-The API performs real-time feature engineering to match the training pipeline:
-
-- Extracts passenger title from `Name`
-- Handles rare and normalized title categories
-- Imputes missing `Age` using title-based medians
-- Imputes missing `Fare` using the training median
-- Creates `Family_Size`
-- Creates `IsAlone`
-- Extracts `Deck` from `Cabin`
-- Adds real-time-safe defaults for:
-  - `Ticket_Group_Size`
-  - `Family_Survival`
-- Creates binned features:
-  - `Fare_Bin`
-  - `Age_Bin`
-
-The final feature set is transformed with the saved `preprocessor.pkl` before being passed to the appropriate model.
-
----
-
-## Current Status
-
-The project is operational. Kubernetes pods are running, the service is exposed through a LoadBalancer on the local network, and the `/predict` endpoint returns prediction JSON.
-
----
-
-## Project Summary
-
-This MLOps implementation transitions Titanic survival research into a production-grade microservice. By using **Azure Arc** and **FluxCD**, the project creates a hybrid-cloud GitOps workflow where local infrastructure operates as an edge Kubernetes node.
-
-The containerized setup ensures that dependencies such as **Scikit-Learn 1.8.0** and **XGBoost 3.2.0** remain consistent across deployments. The FastAPI service provides a clean prediction interface, while Kubernetes handles deployment, scaling, service exposure, and operational management.
+The result is a production-style hybrid-cloud MLOps deployment accessible through both APIs and web interfaces.
